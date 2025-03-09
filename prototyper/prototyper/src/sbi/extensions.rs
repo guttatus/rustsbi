@@ -10,7 +10,8 @@ pub struct HartFeatures {
 
 #[derive(Copy, Clone)]
 pub enum Extension {
-    Sstc = 0,
+    H = 0,
+    Sstc = 1,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -22,11 +23,12 @@ pub enum PrivilegedVersion {
 }
 
 impl Extension {
-    const COUNT: usize = 1;
-    const ITER: [Self; Extension::COUNT] = [Extension::Sstc];
+    const COUNT: usize = 2;
+    const ITER: [Self; Extension::COUNT] = [Extension::H, Extension::Sstc];
 
     pub fn as_str(&self) -> &'static str {
         match self {
+            Extension::H => "h",
             Extension::Sstc => "sstc",
         }
     }
@@ -68,9 +70,19 @@ pub fn init(cpus: &NodeSeq) {
                 hart_exts[ext.index()] = isa.iter().any(|e| e == ext.as_str());
             });
         } else if cpu.isa.is_some() {
-            let isa_iter = cpu.isa.unwrap();
-            let isa = isa_iter.iter().next().unwrap_or_default();
-            Extension::ITER.iter().for_each(|ext| {
+            let isa_seq = cpu.isa.unwrap();
+            let isa = isa_seq.iter().next().unwrap_or_default();
+            let mut isa_split = isa.split('_');
+            // The first str of the `riscv,isa` field is rv64xxx
+            // For example, rv64imafdch
+            let rv64xx = isa_split.next().unwrap_or_default();
+            // Determine whether H extension is implemented.
+            hart_exts[Extension::H.index()] = rv64xx.contains('h');
+            // Skip H extension in extension iterator.
+            let mut exts_iter = Extension::ITER.iter();
+            exts_iter.next();
+            // Determine whether the remaining extensions are implemented
+            exts_iter.for_each(|ext| {
                 hart_exts[ext.index()] = isa.contains(ext.as_str());
             })
         }
